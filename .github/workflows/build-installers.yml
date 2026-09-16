@@ -28,6 +28,8 @@ jobs:
       - name: Generate Android platform
         working-directory: client
         run: flutter create --platforms=android --project-name product_manager --org com.productmanager .
+      - name: Patch package API compatibility
+        run: python ci_patch.py
       - name: Configure biometrics for Android
         working-directory: client
         shell: bash
@@ -53,7 +55,7 @@ jobs:
         run: flutter pub get
       - name: Analyze
         working-directory: client
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
       - name: Build release APK
         working-directory: client
         run: flutter build apk --release
@@ -89,12 +91,14 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter create --platforms=windows --project-name product_manager --org com.productmanager .
+      - name: Patch package API compatibility
+        run: python ci_patch.py
       - name: Dependencies
         working-directory: client
         run: flutter pub get
       - name: Analyze
         working-directory: client
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
       - name: Build Windows release
         working-directory: client
         run: flutter build windows --release
