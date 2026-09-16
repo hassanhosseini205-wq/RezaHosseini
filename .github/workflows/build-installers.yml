@@ -41,8 +41,7 @@ jobs:
               raise SystemExit('MainActivity.kt not found')
           p=files[0]
           s=p.read_text()
-          s=s.replace('import io.flutter.embedding.android.FlutterActivity', 'import io.flutter.embedding.android.FlutterFragmentActivity')
-          s=s.replace('class MainActivity: FlutterActivity()', 'class MainActivity: FlutterFragmentActivity()')
+          s=s.replace('FlutterActivity', 'FlutterFragmentActivity')
           p.write_text(s)
           manifest=Path('android/app/src/main/AndroidManifest.xml')
           m=manifest.read_text()
@@ -69,7 +68,7 @@ jobs:
 
   windows:
     name: Windows Installer
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Rebuild and verify source archive
