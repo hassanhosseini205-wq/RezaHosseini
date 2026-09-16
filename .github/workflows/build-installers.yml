@@ -1,0 +1,104 @@
+name: Build Product Manager Installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        run: unzip -q product-manager-source.zip
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android platform
+        working-directory: client
+        run: flutter create --platforms=android --project-name product_manager --org com.productmanager .
+      - name: Configure local_auth for Android
+        working-directory: client
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          files=list(Path('android/app/src/main/kotlin').rglob('MainActivity.kt'))
+          if not files:
+              raise SystemExit('MainActivity.kt not found')
+          p=files[0]
+          s=p.read_text()
+          s=s.replace('import io.flutter.embedding.android.FlutterActivity', 'import io.flutter.embedding.android.FlutterFragmentActivity')
+          s=s.replace('class MainActivity: FlutterActivity()', 'class MainActivity: FlutterFragmentActivity()')
+          p.write_text(s)
+          manifest=Path('android/app/src/main/AndroidManifest.xml')
+          m=manifest.read_text()
+          if 'android.permission.USE_BIOMETRIC' not in m:
+              m=m.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" />')
+          manifest.write_text(m)
+          PY
+      - name: Dependencies
+        working-directory: client
+        run: flutter pub get
+      - name: Analyze
+        working-directory: client
+        run: flutter analyze
+      - name: Build release APK
+        working-directory: client
+        run: flutter build apk --release
+      - name: Prepare APK
+        run: cp client/build/app/outputs/flutter-apk/app-release.apk ProductManager-Android-v1.0.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProductManager-Android-v1.0.0
+          path: ProductManager-Android-v1.0.0.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        shell: pwsh
+        run: Expand-Archive -Path product-manager-source.zip -DestinationPath . -Force
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Enable and generate Windows platform
+        working-directory: client
+        shell: pwsh
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows --project-name product_manager --org com.productmanager .
+      - name: Dependencies
+        working-directory: client
+        run: flutter pub get
+      - name: Analyze
+        working-directory: client
+        run: flutter analyze
+      - name: Build Windows release
+        working-directory: client
+        run: flutter build windows --release
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build Windows installer
+        working-directory: client
+        shell: pwsh
+        run: |
+          Copy-Item ..\packaging\windows\ProductManager.iss .\ProductManager.iss -Force
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' ProductManager.iss
+          Copy-Item .\installer_output\ProductManager-Windows-v1.0.0-Setup.exe ..\ProductManager-Windows-v1.0.0-Setup.exe -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProductManager-Windows-v1.0.0
+          path: ProductManager-Windows-v1.0.0-Setup.exe
+          if-no-files-found: error
