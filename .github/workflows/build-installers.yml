@@ -14,8 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract source
-        run: unzip -q product-manager-source.zip
+      - name: Rebuild and verify source archive
+        shell: bash
+        run: |
+          cat source.part*.b64 > source.b64
+          base64 -d source.b64 > product-manager-source-fixed.zip
+          echo "29f25ca2d46d47775ae2ff820ee6a447c707ace45a6001696bb6f3490a9fb4d7  product-manager-source-fixed.zip" | sha256sum -c -
+          unzip -q product-manager-source-fixed.zip
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -23,7 +28,7 @@ jobs:
       - name: Generate Android platform
         working-directory: client
         run: flutter create --platforms=android --project-name product_manager --org com.productmanager .
-      - name: Configure local_auth for Android
+      - name: Configure biometrics for Android
         working-directory: client
         shell: bash
         run: |
@@ -40,7 +45,7 @@ jobs:
           manifest=Path('android/app/src/main/AndroidManifest.xml')
           m=manifest.read_text()
           if 'android.permission.USE_BIOMETRIC' not in m:
-              m=m.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" />')
+              m=m.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" />')
           manifest.write_text(m)
           PY
       - name: Dependencies
@@ -65,9 +70,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract source
+      - name: Rebuild and verify source archive
         shell: pwsh
-        run: Expand-Archive -Path product-manager-source.zip -DestinationPath . -Force
+        run: |
+          $parts = Get-ChildItem source.part*.b64 | Sort-Object Name
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes('product-manager-source-fixed.zip', [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash product-manager-source-fixed.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '29f25ca2d46d47775ae2ff820ee6a447c707ace45a6001696bb6f3490a9fb4d7') { throw "SHA256 mismatch: $hash" }
+          Expand-Archive -Path product-manager-source-fixed.zip -DestinationPath . -Force
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
